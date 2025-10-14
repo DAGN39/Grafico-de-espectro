@@ -5,6 +5,7 @@
   <meta name="viewport" content="width=device-width, initial-scale=1.0">
   <title>📊 Analizador de Espectro - Profesional</title>
   <script src="https://cdn.jsdelivr.net/npm/chart.js"></script>
+  <script src="https://cdn.jsdelivr.net/npm/chartjs-plugin-zoom@2.0.1/dist/chartjs-plugin-zoom.min.js"></script>
   <style>
     /* 🎨 PALETA DE COLORES (se mantiene igual) */
     :root {
@@ -84,7 +85,7 @@
       font-size: 0.95em;
     }
 
-    .form-group input {
+    .form-group input, .form-group select {
       padding: 12px 15px;
       border: 2px solid var(--color1);
       border-radius: 8px;
@@ -94,11 +95,31 @@
       transition: all 0.3s ease;
     }
 
-    .form-group input:focus {
+    .form-group input:focus, .form-group select:focus {
       outline: none;
       border-color: var(--color2);
       box-shadow: 0 0 10px rgba(20, 195, 162, 0.3);
       background: rgba(255,255,255,0.15);
+    }
+
+    .form-group select option {
+      background: var(--bg-card);
+      color: var(--text-light);
+    }
+
+    .input-with-unit {
+      display: flex;
+      gap: 10px;
+      align-items: center;
+    }
+
+    .input-with-unit input {
+      flex: 1;
+    }
+
+    .input-with-unit select {
+      width: 100px; /* Aumentado de 80px a 100px para mejor visibilidad */
+      min-width: 100px; /* Asegura que no se reduzca más allá de este tamaño */
     }
 
     .btn-generar {
@@ -160,7 +181,6 @@
       justify-content: space-between;
       align-items: center;
       margin-bottom: 10px;
-      
     }
 
     .señal-title {
@@ -176,6 +196,7 @@
       margin-bottom: 30px;
       box-shadow: 0 4px 15px rgba(0,0,0,0.3);
       border-left: 5px solid var(--color4);
+      position: relative;
     }
 
     .chart-title {
@@ -188,6 +209,33 @@
     #espectroChart {
       width: 100% !important;
       height: 400px !important;
+    }
+
+    .chart-controls {
+      position: absolute;
+      top: 20px;
+      right: 25px;
+      display: flex;
+      gap: 10px;
+    }
+
+    .btn-zoom {
+      background: rgba(20, 195, 162, 0.2);
+      color: var(--color2);
+      border: 1px solid var(--color2);
+      border-radius: 4px;
+      width: 36px;
+      height: 36px;
+      display: flex;
+      align-items: center;
+      justify-content: center;
+      cursor: pointer;
+      transition: all 0.3s ease;
+      font-size: 14px;
+    }
+
+    .btn-zoom:hover {
+      background: rgba(20, 195, 162, 0.4);
     }
 
     .results-container {
@@ -250,6 +298,18 @@
       .container {
         padding: 10px;
       }
+      .input-with-unit {
+        flex-direction: column;
+        gap: 5px;
+      }
+      .input-with-unit select {
+        width: 100%;
+      }
+      .chart-controls {
+        position: static;
+        justify-content: center;
+        margin-bottom: 15px;
+      }
     }
   </style>
 </head>
@@ -265,11 +325,19 @@
         <div class="form-grid">
           <div class="form-group">
             <label>🌡️ Temperatura (K):</label>
-            <input type="number" step="any" name="temperatura" value="290" required>
+            <input type="number" step="any" name="temperatura" value="300" required>
           </div>
           <div class="form-group">
-            <label>📡 Ancho de banda (Hz):</label>
-            <input type="number" step="any" name="ancho_banda" value="1000000" required>
+            <label>📡 Ancho de banda:</label>
+            <div class="input-with-unit">
+              <input type="number" step="any" name="ancho_banda_valor" value="2.41" required>
+              <select name="ancho_banda_unidad" required>
+                <option value="Hz">Hz</option>
+                <option value="kHz">kHz</option>
+                <option value="MHz" selected>MHz</option>
+                <option value="GHz">GHz</option>
+              </select>
+            </div>
           </div>
         </div>
 
@@ -282,8 +350,16 @@
             </div>
             <div class="form-grid">
               <div class="form-group">
-                <label>🎯 Frecuencia de la señal (Hz):</label>
-                <input type="number" step="any" name="frecuencia_senal_1" value="200" required>
+                <label>🎯 Frecuencia de la señal:</label>
+                <div class="input-with-unit">
+                  <input type="number" step="any" name="frecuencia_senal_valor_1" value="200" required>
+                  <select name="frecuencia_senal_unidad_1" required>
+                    <option value="Hz">Hz</option>
+                    <option value="kHz">kHz</option>
+                    <option value="MHz" selected>MHz</option>
+                    <option value="GHz">GHz</option>
+                  </select>
+                </div>
               </div>
               <div class="form-group">
                 <label>⚡ PIRE (dBm):</label>
@@ -291,7 +367,7 @@
               </div>
               <div class="form-group">
                 <label>🔍 Ancho de banda de la señal (MHz):</label>
-                <input type="number" name="ancho_banda_senal_1" value="6" required>
+                <input type="number" step="any" name="ancho_banda_senal_valor_1" value="6" required>
               </div>
             </div>
           </div>
@@ -312,6 +388,11 @@
 
     <section class="chart-container">
       <h2 class="chart-title">📈 Gráfica del Espectro (dBm por bin)</h2>
+      <div class="chart-controls">
+        <button class="btn-zoom" id="zoomIn" title="Acercar">+</button>
+        <button class="btn-zoom" id="zoomOut" title="Alejar">-</button>
+        <button class="btn-zoom" id="resetZoom" title="Restablecer zoom">↺</button>
+      </div>
       <canvas id="espectroChart"></canvas>
     </section>
 
@@ -343,6 +424,14 @@
       '#69DB7C', '#FF8787', '#3BC9DB', '#FFD43B', '#CC5DE8'
     ];
 
+    // 🎯 FACTORES DE CONVERSIÓN
+    const factoresConversion = {
+      'Hz': 1,
+      'kHz': 1e3,
+      'MHz': 1e6,
+      'GHz': 1e9
+    };
+
     // ➕ FUNCIÓN PARA AÑADIR NUEVA SEÑAL
     function añadirSeñal() {
       contadorSeñales++;
@@ -359,8 +448,16 @@
         </div>
         <div class="form-grid">
           <div class="form-group">
-            <label>🎯 Frecuencia de la señal (Hz):</label>
-            <input type="number" step="any" name="frecuencia_senal_${contadorSeñales}" value="${200 + (contadorSeñales - 1) * 50}" required>
+            <label>🎯 Frecuencia de la señal:</label>
+            <div class="input-with-unit">
+              <input type="number" step="any" name="frecuencia_senal_valor_${contadorSeñales}" value="${200 + (contadorSeñales - 1) * 50}" required>
+              <select name="frecuencia_senal_unidad_${contadorSeñales}" required>
+                <option value="Hz">Hz</option>
+                <option value="kHz">kHz</option>
+                <option value="MHz" selected>MHz</option>
+                <option value="GHz">GHz</option>
+              </select>
+            </div>
           </div>
           <div class="form-group">
             <label>⚡ PIRE (dBm):</label>
@@ -368,7 +465,7 @@
           </div>
           <div class="form-group">
             <label>🔍 Ancho de banda de la señal (MHz):</label>
-            <input type="number" name="ancho_banda_senal_${contadorSeñales}" value="6" required>
+            <input type="number" step="any" name="ancho_banda_senal_valor_${contadorSeñales}" value="6" required>
           </div>
         </div>
       `;
@@ -382,7 +479,6 @@
         const señal = document.querySelector(`[data-señal-id="${id}"]`);
         if (señal) {
           señal.remove();
-          // Reorganizar los IDs si es necesario
           const señalesRestantes = document.querySelectorAll('.señal-item');
           contadorSeñales = señalesRestantes.length;
         }
@@ -391,24 +487,41 @@
       }
     }
 
-    // 📡 OBTENER DATOS DE TODAS LAS SEÑALES
+    // 🎯 FUNCIÓN PARA CONVERTIR A Hz
+    function convertirAHz(valor, unidad) {
+      return valor * factoresConversion[unidad];
+    }
+
+    // 📡 OBTENER DATOS DE TODAS LAS SEÑALES (convertidos a Hz)
     function obtenerDatosSeñales() {
       const señales = [];
       const elementosSeñales = document.querySelectorAll('.señal-item');
       
       elementosSeñales.forEach((elemento, index) => {
         const id = elemento.getAttribute('data-señal-id');
-        const frecuencia = parseFloat(elemento.querySelector(`input[name="frecuencia_senal_${id}"]`).value);
+        
+        // Obtener valores y unidades
+        const frecuenciaValor = parseFloat(elemento.querySelector(`input[name="frecuencia_senal_valor_${id}"]`).value);
+        const frecuenciaUnidad = elemento.querySelector(`select[name="frecuencia_senal_unidad_${id}"]`).value;
         const pire = parseFloat(elemento.querySelector(`input[name="pire_dbm_${id}"]`).value);
-        const anchoBanda = parseFloat(elemento.querySelector(`input[name="ancho_banda_senal_${id}"]`).value);
+        const anchoBandaValor = parseFloat(elemento.querySelector(`input[name="ancho_banda_senal_valor_${id}"]`).value);
+        
+        // Convertir a Hz (el ancho de banda de señal ahora siempre está en MHz)
+        const frecuenciaHz = convertirAHz(frecuenciaValor, frecuenciaUnidad);
+        const anchoBandaHz = convertirAHz(anchoBandaValor, 'MHz');
         
         señales.push({
           id: id,
-          frecuencia: frecuencia,
+          frecuencia: frecuenciaHz,
           pire: pire,
-          ancho_banda: anchoBanda,
+          ancho_banda: anchoBandaHz,
           color: coloresSeñales[index % coloresSeñales.length],
-          colorPuntos: coloresPuntos3dB[index % coloresPuntos3dB.length]
+          colorPuntos: coloresPuntos3dB[index % coloresPuntos3dB.length],
+          // Guardar también los valores originales para mostrar en tooltips
+          frecuenciaOriginal: frecuenciaValor,
+          frecuenciaUnidad: frecuenciaUnidad,
+          anchoBandaOriginal: anchoBandaValor,
+          anchoBandaUnidad: 'MHz' // Siempre será MHz
         });
       });
       
@@ -419,12 +532,16 @@
       e.preventDefault();
       loading.style.display = 'block';
 
-      const fd = new FormData(form);
       const señales = obtenerDatosSeñales();
       
+      // Obtener ancho de banda del ruido
+      const anchoBandaRuidoValor = parseFloat(form.querySelector('input[name="ancho_banda_valor"]').value);
+      const anchoBandaRuidoUnidad = form.querySelector('select[name="ancho_banda_unidad"]').value;
+      const anchoBandaRuidoHz = convertirAHz(anchoBandaRuidoValor, anchoBandaRuidoUnidad);
+      
       const payload = {
-        temperatura: parseFloat(fd.get('temperatura')),
-        ancho_banda: parseFloat(fd.get('ancho_banda')),
+        temperatura: parseFloat(form.querySelector('input[name="temperatura"]').value),
+        ancho_banda: anchoBandaRuidoHz,
         señales: señales
       };
 
@@ -466,7 +583,6 @@
       const freqs = data.freqs;
       let señalCombinada = new Array(freqs.length).fill(-Infinity);
       
-      // Combinar todas las señales tomando el valor máximo en cada frecuencia
       señales.forEach(señal => {
         const señalData = data[`señal_${señal.id}_dbm`] || [];
         señalData.forEach((valor, index) => {
@@ -477,6 +593,27 @@
       });
 
       return señalCombinada;
+    }
+
+    // 🔧 FUNCIÓN PARA GENERAR RUIDO CON VARIACIONES (PICOS MINÚSCULOS)
+    function generarRuidoConPicos(data, nivelRuidoBase) {
+      const ruidoConPicos = [];
+      const numPuntos = data.freqs.length;
+      
+      // Generar ruido con variaciones aleatorias
+      for (let i = 0; i < numPuntos; i++) {
+        // Ruido base con pequeñas variaciones (±0.5 dB)
+        let ruido = nivelRuidoBase + (Math.random() - 0.5) * 1.0;
+        
+        // Ocasionalmente añadir picos más pronunciados (5% de probabilidad)
+        if (Math.random() < 0.05) {
+          ruido += (Math.random() * 2 - 1) * 3; // Picos de ±3 dB
+        }
+        
+        ruidoConPicos.push(ruido);
+      }
+      
+      return ruidoConPicos;
     }
 
     async function procesarDatosEspectro(data, señales) {
@@ -491,7 +628,7 @@
         <span style="color: #0de5a8">${ruidoDbm} dBm</span>
       `;
 
-      // 🎯 CONVERSIÓN DE UNIDADES
+      // 🎯 CONVERSIÓN DE UNIDADES PARA LA GRÁFICA
       let factor = 1;
       let unidad = 'Hz';
       const maxF = Math.max(...freqs);
@@ -504,6 +641,14 @@
       // 🎯 COMBINAR TODAS LAS SEÑALES EN UNA SOLA GRÁFICA
       const señalCombinada = combinarSeñales(data, señales);
 
+      // 🔧 GENERAR RUIDO CON PICOS MINÚSCULOS
+      const ruidoConPicos = generarRuidoConPicos(data, ruidoDbm);
+
+      // 🎯 COMBINAR SEÑAL CON RUIDO (tomando el máximo en cada punto)
+      const espectroFinal = señalCombinada.map((valorSeñal, index) => {
+        return Math.max(valorSeñal, ruidoConPicos[index]);
+      });
+
       // 🗑️ DESTRUIR CHART ANTERIOR SI EXISTE
       if (chart) chart.destroy();
 
@@ -513,7 +658,7 @@
       // 1. AÑADIR LA SEÑAL COMBINADA (ÚNICA LÍNEA)
       datasets.push({
         label: '📊 Espectro Combinado',
-        data: señalCombinada,
+        data: espectroFinal,
         borderWidth: 3,
         borderColor: '#0de5a8',
         backgroundColor: 'transparent',
@@ -531,8 +676,8 @@
 
         // Punto máximo de la señal
         const indicePuntoMaximo = encontrarIndiceMasCercano(freqs, señal.frecuencia);
-        const puntoMaximoData = new Array(señalCombinada.length).fill(null);
-        puntoMaximoData[indicePuntoMaximo] = señalCombinada[indicePuntoMaximo];
+        const puntoMaximoData = new Array(espectroFinal.length).fill(null);
+        puntoMaximoData[indicePuntoMaximo] = espectroFinal[indicePuntoMaximo];
 
         datasets.push({
           label: `📍 Señal ${señal.id} - Parámetros`,
@@ -552,7 +697,7 @@
           const indiceIzquierdo = encontrarIndiceMasCercano(freqs, fLeft);
           const indiceDerecho = encontrarIndiceMasCercano(freqs, fRight);
           
-          const puntos3dBData = new Array(señalCombinada.length).fill(null);
+          const puntos3dBData = new Array(espectroFinal.length).fill(null);
           puntos3dBData[indiceIzquierdo] = nivel3db;
           puntos3dBData[indiceDerecho] = nivel3db;
 
@@ -635,7 +780,7 @@
                     const señal = señales.find(s => s.id === señalId);
                     if (señal) {
                       return [
-                        `Frecuencia: ${señal.frecuencia} Hz`,
+                        `Frecuencia: ${señal.frecuenciaOriginal} ${señal.frecuenciaUnidad}`,
                         `PIRE: ${señal.pire} dBm`
                       ];
                     }
@@ -647,14 +792,18 @@
                       const fRight = data[`señal_${señal.id}_f_right`];
                       const nivel3db = data[`señal_${señal.id}_nivel_3db`];
                       
+                      // Convertir a unidades originales para mostrar
+                      const fLeftConvertido = fLeft / factoresConversion[señal.frecuenciaUnidad];
+                      const fRightConvertido = fRight / factoresConversion[señal.frecuenciaUnidad];
+                      
                       if (context.dataIndex === encontrarIndiceMasCercano(freqs, fLeft)) {
                         return [
-                          `Frecuencia: ${fLeft} Hz`,
+                          `Frecuencia: ${fLeftConvertido.toFixed(6)} ${señal.frecuenciaUnidad}`,
                           `Potencia: ${nivel3db} dBm (-3 dB)`
                         ];
                       } else if (context.dataIndex === encontrarIndiceMasCercano(freqs, fRight)) {
                         return [
-                          `Frecuencia: ${fRight} Hz`,
+                          `Frecuencia: ${fRightConvertido.toFixed(6)} ${señal.frecuenciaUnidad}`,
                           `Potencia: ${nivel3db} dBm (-3 dB)`
                         ];
                       }
@@ -676,6 +825,25 @@
                   }
                 }
               }
+            },
+            zoom: {
+              zoom: {
+                wheel: {
+                  enabled: true,
+                },
+                pinch: {
+                  enabled: true
+                },
+                mode: 'xy',
+              },
+              pan: {
+                enabled: true,
+                mode: 'xy',
+              },
+              limits: {
+                x: {min: 'original', max: 'original'},
+                y: {min: 'original', max: 'original'}
+              }
             }
           }
         }
@@ -689,13 +857,38 @@
         
         if (fLeft && fRight) {
           const anchoBanda = fRight - fLeft;
+          // Convertir a las unidades originales de la señal
+          const anchoBandaConvertido = anchoBanda / factoresConversion[señal.anchoBandaUnidad];
           infoAnchoBanda += `
-            <span style="color: ${señal.colorPuntos}">Señal ${señal.id}: ${(anchoBanda * factor).toFixed(6)} ${unidad}</span><br>
+            <span style="color: ${señal.colorPuntos}">Señal ${señal.id}: ${anchoBandaConvertido.toFixed(6)} ${señal.anchoBandaUnidad}</span><br>
           `;
         }
       });
       
       document.getElementById('anchoBandaResultados').innerHTML = infoAnchoBanda;
+
+      // Configurar controles de zoom
+      configurarControlesZoom();
+    }
+
+    function configurarControlesZoom() {
+      document.getElementById('zoomIn').addEventListener('click', function() {
+        if (chart) {
+          chart.zoom(1.1);
+        }
+      });
+
+      document.getElementById('zoomOut').addEventListener('click', function() {
+        if (chart) {
+          chart.zoom(0.9);
+        }
+      });
+
+      document.getElementById('resetZoom').addEventListener('click', function() {
+        if (chart) {
+          chart.resetZoom();
+        }
+      });
     }
 
     document.addEventListener('DOMContentLoaded', () => {
