@@ -6,8 +6,8 @@ import os
 
 app = Flask(
     __name__,
-    template_folder='../frontend',
-    static_folder='../frontend'
+    template_folder='frontend',  # <- CAMBIO AQUÍ
+    static_folder='frontend'     # <- CAMBIO AQUÍ
 )
 
 # Constante de Boltzmann
