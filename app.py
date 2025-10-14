@@ -6,9 +6,9 @@ import os
 
 app = Flask(
     __name__,
-    template_folder=os.path.join('..', 'frontend'),
-    static_folder=os.path.join('..', 'frontend')
-)   
+    template_folder='../frontend',
+    static_folder='../frontend'
+)
 
 # Constante de Boltzmann
 k = 1.38e-23
