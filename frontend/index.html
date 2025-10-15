@@ -385,7 +385,7 @@
     </div>
 
     <section class="chart-container">
-      <h2 class="chart-title">📈 Gráfica del Espectro (dBm por bin)</h2>
+      <h2 class="chart-title">📈 Gráfica del Espectro (dBm por frecuencia)</h2>
       <div class="chart-controls">
         <button class="btn-zoom" id="zoomIn" title="Acercar">+</button>
         <button class="btn-zoom" id="zoomOut" title="Alejar">-</button>
@@ -403,7 +403,7 @@
     </section>
   </div>
 
-  <script>
+<script>
     const form = document.getElementById('paramsForm');
     const ctx = document.getElementById('espectroChart').getContext('2d');
     const loading = document.getElementById('loading');
@@ -490,6 +490,11 @@
       return valor * factoresConversion[unidad];
     }
 
+    // 🎯 FUNCIÓN PARA CONVERTIR A MHz (NUEVA)
+    function convertirAMHz(valor, unidad) {
+      return valor * factoresConversion[unidad] / factoresConversion['MHz'];
+    }
+
     // 📡 OBTENER DATOS DE TODAS LAS SEÑALES (convertidos a Hz)
     function obtenerDatosSeñales() {
       const señales = [];
@@ -508,9 +513,13 @@
         const frecuenciaHz = convertirAHz(frecuenciaValor, frecuenciaUnidad);
         const anchoBandaHz = convertirAHz(anchoBandaValor, 'MHz');
         
+        // También convertir a MHz para uso en la gráfica
+        const frecuenciaMHz = convertirAMHz(frecuenciaValor, frecuenciaUnidad);
+        
         señales.push({
           id: id,
           frecuencia: frecuenciaHz,
+          frecuenciaMHz: frecuenciaMHz, // Nueva propiedad para MHz
           pire: pire,
           ancho_banda: anchoBandaHz,
           color: coloresSeñales[index % coloresSeñales.length],
@@ -626,14 +635,11 @@
         <span style="color: #0de5a8">${ruidoDbm} dBm</span>
       `;
 
-      // 🎯 CONVERSIÓN DE UNIDADES PARA LA GRÁFICA
-      let factor = 1;
-      let unidad = 'Hz';
-      const maxF = Math.max(...freqs);
-      if (maxF >= 1e9) { factor = 1e-9; unidad = 'GHz'; }
-      else if (maxF >= 1e6) { factor = 1e-6; unidad = 'MHz'; }
-      else if (maxF >= 1e3) { factor = 1e-3; unidad = 'kHz'; }
+      // 🎯 CONVERSIÓN FIJA A MHz (SIEMPRE MOSTRAR MHz)
+      const factor = 1e-6; // Siempre convertir a MHz
+      const unidad = 'MHz'; // Unidad fija
 
+      // Convertir todas las frecuencias a MHz
       const labels = freqs.map(f => (f * factor).toFixed(6));
 
       // 🎯 COMBINAR TODAS LAS SEÑALES EN UNA SOLA GRÁFICA
@@ -672,8 +678,11 @@
         const fRight = data[`señal_${señal.id}_f_right`];
         const nivel3db = data[`señal_${señal.id}_nivel_3db`];
 
-        // Punto máximo de la señal
-        const indicePuntoMaximo = encontrarIndiceMasCercano(freqs, señal.frecuencia);
+        // Punto máximo de la señal - convertir a MHz
+        const frecuenciaMHz = señal.frecuencia * factor;
+        const freqsMHz = freqs.map(f => f * factor); // Convertir array completo a MHz
+        const indicePuntoMaximo = encontrarIndiceMasCercano(freqsMHz, frecuenciaMHz);
+        
         const puntoMaximoData = new Array(espectroFinal.length).fill(null);
         puntoMaximoData[indicePuntoMaximo] = espectroFinal[indicePuntoMaximo];
 
@@ -690,10 +699,13 @@
           order: 90 - index
         });
 
-        // Puntos -3 dB si existen
+        // Puntos -3 dB si existen - convertir a MHz
         if (fLeft && fRight && nivel3db) {
-          const indiceIzquierdo = encontrarIndiceMasCercano(freqs, fLeft);
-          const indiceDerecho = encontrarIndiceMasCercano(freqs, fRight);
+          const fLeftMHz = fLeft * factor;
+          const fRightMHz = fRight * factor;
+          
+          const indiceIzquierdo = encontrarIndiceMasCercano(freqsMHz, fLeftMHz);
+          const indiceDerecho = encontrarIndiceMasCercano(freqsMHz, fRightMHz);
           
           const puntos3dBData = new Array(espectroFinal.length).fill(null);
           puntos3dBData[indiceIzquierdo] = nivel3db;
@@ -733,7 +745,7 @@
             x: {
               title: {
                 display: true,
-                text: `Frecuencia (${unidad})`,
+                text: `Frecuencia (${unidad})`, // Siempre mostrar MHz
                 color: 'rgba(184, 253, 153, 0.1)',
                 font: { size: 14, weight: 'bold' }
               },
@@ -790,18 +802,18 @@
                       const fRight = data[`señal_${señal.id}_f_right`];
                       const nivel3db = data[`señal_${señal.id}_nivel_3db`];
                       
-                      // Convertir a unidades originales para mostrar
-                      const fLeftConvertido = fLeft / factoresConversion[señal.frecuenciaUnidad];
-                      const fRightConvertido = fRight / factoresConversion[señal.frecuenciaUnidad];
+                      // Convertir a MHz para mostrar en tooltip
+                      const fLeftMHz = fLeft * factor;
+                      const fRightMHz = fRight * factor;
                       
-                      if (context.dataIndex === encontrarIndiceMasCercano(freqs, fLeft)) {
+                      if (context.dataIndex === encontrarIndiceMasCercano(freqsMHz, fLeftMHz)) {
                         return [
-                          `Frecuencia: ${fLeftConvertido.toFixed(6)} ${señal.frecuenciaUnidad}`,
+                          `Frecuencia: ${fLeftMHz.toFixed(6)} MHz`,
                           `Potencia: ${nivel3db} dBm (-3 dB)`
                         ];
-                      } else if (context.dataIndex === encontrarIndiceMasCercano(freqs, fRight)) {
+                      } else if (context.dataIndex === encontrarIndiceMasCercano(freqsMHz, fRightMHz)) {
                         return [
-                          `Frecuencia: ${fRightConvertido.toFixed(6)} ${señal.frecuenciaUnidad}`,
+                          `Frecuencia: ${fRightMHz.toFixed(6)} MHz`,
                           `Potencia: ${nivel3db} dBm (-3 dB)`
                         ];
                       }
@@ -818,7 +830,7 @@
                     return `📏 Ancho de Banda -3 dB`;
                   } else {
                     const index = context[0].dataIndex;
-                    const frecuenciaActual = freqs[index] * factor;
+                    const frecuenciaActual = freqs[index] * factor; // Ya en MHz
                     return `Frecuencia: ${frecuenciaActual.toFixed(6)} ${unidad}`;
                   }
                 }
@@ -855,10 +867,10 @@
         
         if (fLeft && fRight) {
           const anchoBanda = fRight - fLeft;
-          // Convertir a las unidades originales de la señal
-          const anchoBandaConvertido = anchoBanda / factoresConversion[señal.anchoBandaUnidad];
+          // Convertir a MHz para mostrar
+          const anchoBandaMHz = anchoBanda * factor;
           infoAnchoBanda += `
-            <span style="color: ${señal.colorPuntos}">Señal ${señal.id}: ${anchoBandaConvertido.toFixed(6)} ${señal.anchoBandaUnidad}</span><br>
+            <span style="color: ${señal.colorPuntos}">Señal ${señal.id}: ${anchoBandaMHz.toFixed(6)} MHz</span><br>
           `;
         }
       });
